@@ -60,6 +60,8 @@ var runCommand = cli.Command{
 			CpuSet:      context.String("cpuset"),
 			MemoryLimit: context.String("mem"),
 		}
+		log.Info("Conf:", cfg)
+
 		Run(tty, cmdList, cfg)
 		return nil
 	},

@@ -37,8 +37,8 @@ func Run(tty bool, cmdList []string, cfg *subsystems.ResourceConfig) {
 }
 
 // sendInitCommand 通过 writePipe 将指令发送给子进程
-func sendInitCommand(comArray []string, writePipe *os.File) {
-	command := strings.Join(comArray, " ")
+func sendInitCommand(cmdList []string, writePipe *os.File) {
+	command := strings.Join(cmdList, " ")
 	log.Infof("command all is %s", command)
 	_, _ = writePipe.WriteString(command)
 	_ = writePipe.Close()
