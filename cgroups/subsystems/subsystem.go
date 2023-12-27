@@ -5,10 +5,10 @@ package subsystems
 // cpu 权重设置
 // cpu 亲合度设置
 type ResourceConfig struct {
-	MemoryLimit string
 	CpuCfsQuota int
 	CpuShare    string
 	CpuSet      string
+	MemoryLimit string
 }
 
 type Subsystem interface {
