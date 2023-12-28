@@ -60,7 +60,7 @@ var runCommand = cli.Command{
 			CpuSet:      context.String("cpuset"),
 			MemoryLimit: context.String("mem"),
 		}
-		log.Info("Conf:", cfg)
+		log.Info("Config: ", cfg)
 
 		Run(tty, cmdList, cfg)
 		return nil
@@ -76,9 +76,7 @@ var initCommand = cli.Command{
 	*/
 	Action: func(context *cli.Context) error {
 		log.Infof("init come on")
-		cmd := context.Args().Get(0)
-		log.Infof("command: %s", cmd)
-		err := container.RunContainerInitProcess(cmd, nil)
+		err := container.RunContainerInitProcess()
 		return err
 	},
 }

@@ -17,7 +17,8 @@ import (
 	这是本容器执行的第一个进程。
 	使用 mount 先去挂载 proc 文件系统，以便后面通过 ps 等系统命令去查看当前进程资源的情况。
 */
-func RunContainerInitProcess(command string, args []string) error {
+func RunContainerInitProcess() error {
+	// 通过 readPipe 读取 writePipe 写入的需要执行的命令
 	cmdList := readUserCommand()
 	if len(cmdList) == 0 {
 		return errors.New("run container get user command error, cmdList is nil")
@@ -28,6 +29,8 @@ func RunContainerInitProcess(command string, args []string) error {
 		return err
 	}
 	defaultMountFlags := syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV
+	// 设置容器内部 hostname
+	_ = syscall.Sethostname([]byte("container"))
 	// mount --make-private /proc
 	// 防止在新的 namespace 中修改会传播到原来的 namespace 中
 	_ = syscall.Mount("", "/proc", "", syscall.MS_PRIVATE|syscall.MS_REC, "")
