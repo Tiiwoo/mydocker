@@ -34,6 +34,10 @@ func Run(tty bool, cmdList []string, cfg *subsystems.ResourceConfig) {
 	// 在子进程创建后才能通过管道来发送参数
 	sendInitCommand(cmdList, writePipe)
 	_ = parent.Wait()
+	// 需要运行完后删除相关目录
+	rootPath := "/root/"
+	mntPath := "/root/merged"
+	container.DeleteWorkSpace(rootPath, mntPath)
 }
 
 // sendInitCommand 通过 writePipe 将指令发送给子进程

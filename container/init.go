@@ -36,7 +36,7 @@ func RunContainerInitProcess() error {
 		return err
 	}
 	// 设置容器内部 hostname
-	// _ = syscall.Sethostname([]byte("container"))
+	// syscall.Sethostname([]byte("container"))
 	log.Infof("Find path %s", path)
 	if err = syscall.Exec(path, cmdList[0:], os.Environ()); err != nil {
 		log.Errorf("RunContainerInitProcess exec :" + err.Error())
@@ -70,9 +70,7 @@ func readUserCommand() []string {
 	return strings.Split(msgStr, " ")
 }
 
-/*
-Init 挂载点
-*/
+// Init 挂载点
 func setUpMount() {
 	pwd, err := os.Getwd()
 	if err != nil {
@@ -91,8 +89,8 @@ func setUpMount() {
 	syscall.Mount("proc", "/proc", "proc", uintptr(defaultMountFlags), "")
 
 	// Mount tmpfs
-	syscall.Mount("", "/dev", "", syscall.MS_PRIVATE|syscall.MS_REC, "")
-	syscall.Mount("tmpfs", "/dev", "tmpfs", syscall.MS_NOSUID|syscall.MS_STRICTATIME, "mode=755")
+	// syscall.Mount("", "/dev", "", syscall.MS_PRIVATE|syscall.MS_REC, "")
+	// syscall.Mount("tmpfs", "/dev", "tmpfs", syscall.MS_NOSUID|syscall.MS_STRICTATIME, "mode=755")
 }
 
 func pivotRoot(rootPath string) error {
