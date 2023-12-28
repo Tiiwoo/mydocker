@@ -1,12 +1,15 @@
 package container
 
 import (
-	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/pkg/errors"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -23,19 +26,17 @@ func RunContainerInitProcess() error {
 	if len(cmdList) == 0 {
 		return errors.New("run container get user command error, cmdList is nil")
 	}
+
+	// 挂载文件系统
+	setUpMount()
+
 	path, err := exec.LookPath(cmdList[0])
 	if err != nil {
 		log.Errorf("Exec loop path error %v", err)
 		return err
 	}
-	defaultMountFlags := syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV
 	// 设置容器内部 hostname
-	_ = syscall.Sethostname([]byte("container"))
-	// mount --make-private /proc
-	// 防止在新的 namespace 中修改会传播到原来的 namespace 中
-	_ = syscall.Mount("", "/proc", "", syscall.MS_PRIVATE|syscall.MS_REC, "")
-	// mount -t proc proc /proc
-	_ = syscall.Mount("proc", "/proc", "proc", uintptr(defaultMountFlags), "")
+	// _ = syscall.Sethostname([]byte("container"))
 	log.Infof("Find path %s", path)
 	if err = syscall.Exec(path, cmdList[0:], os.Environ()); err != nil {
 		log.Errorf("RunContainerInitProcess exec :" + err.Error())
@@ -67,4 +68,60 @@ func readUserCommand() []string {
 	}
 	msgStr := string(msg)
 	return strings.Split(msgStr, " ")
+}
+
+/*
+Init 挂载点
+*/
+func setUpMount() {
+	pwd, err := os.Getwd()
+	if err != nil {
+		log.Errorf("Get current location error %v", err)
+		return
+	}
+	log.Infof("Current location is %s", pwd)
+	pivotRoot(pwd)
+
+	// Mount /proc
+	defaultMountFlags := syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV
+	// mount --make-private /proc
+	// 防止在新的 namespace 中修改会传播到原来的 namespace 中
+	syscall.Mount("", "/proc", "", syscall.MS_PRIVATE|syscall.MS_REC, "")
+	// mount -t proc proc /proc
+	syscall.Mount("proc", "/proc", "proc", uintptr(defaultMountFlags), "")
+
+	// Mount tmpfs
+	syscall.Mount("", "/dev", "", syscall.MS_PRIVATE|syscall.MS_REC, "")
+	syscall.Mount("tmpfs", "/dev", "tmpfs", syscall.MS_NOSUID|syscall.MS_STRICTATIME, "mode=755")
+}
+
+func pivotRoot(rootPath string) error {
+	/*
+		为了使当前 root 的老 root 和新 root 不在同一个文件系统下，我们把 root 重新 mount 了一次
+		bind mount 是把相同的内容换了一个挂载点的挂载方法
+	*/
+	if err := syscall.Mount(rootPath, rootPath, "bind", syscall.MS_BIND|syscall.MS_REC, ""); err != nil {
+		return errors.Wrap(err, "mount rootfs to itself")
+	}
+	// 创建 rootfs/.old_root 来存储 old root
+	oldDir := filepath.Join(rootPath, ".old_root")
+	if err := os.Mkdir(oldDir, 0777); err != nil {
+		return err
+	}
+	// 系统调用 pivot_root 切换到新的 root，将老的 root 挂载到 rootfs/.old_root 下
+	if err := syscall.PivotRoot(rootPath, oldDir); err != nil {
+		return fmt.Errorf("pivot_root %v", err)
+	}
+	// 修改当前目录到 "/"
+	if err := os.Chdir("/"); err != nil {
+		return fmt.Errorf("chdir %v", err)
+	}
+
+	oldDir = filepath.Join("/", ".old_root")
+	// unmount rootfs/.old_root
+	if err := syscall.Unmount(oldDir, syscall.MNT_DETACH); err != nil {
+		return fmt.Errorf("unmount old_root dir %v", err)
+	}
+	// 删除 .old_root 临时文件夹
+	return os.Remove(oldDir)
 }
