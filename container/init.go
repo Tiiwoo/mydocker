@@ -82,6 +82,7 @@ func setUpMount() {
 
 	// Mount /proc
 	defaultMountFlags := syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV
+	// syscall.Mount("", "/", "", syscall.MS_PRIVATE|syscall.MS_REC, "")
 	// mount --make-private /proc
 	// 防止在新的 namespace 中修改会传播到原来的 namespace 中
 	syscall.Mount("", "/proc", "", syscall.MS_PRIVATE|syscall.MS_REC, "")
@@ -89,8 +90,11 @@ func setUpMount() {
 	syscall.Mount("proc", "/proc", "proc", uintptr(defaultMountFlags), "")
 
 	// Mount tmpfs
-	// syscall.Mount("", "/dev", "", syscall.MS_PRIVATE|syscall.MS_REC, "")
-	// syscall.Mount("tmpfs", "/dev", "tmpfs", syscall.MS_NOSUID|syscall.MS_STRICTATIME, "mode=755")
+	syscall.Mount("", "/dev", "", syscall.MS_PRIVATE|syscall.MS_REC, "")
+	syscall.Mount("none", "/dev", "devtmpfs", syscall.MS_NOSUID|syscall.MS_STRICTATIME, "mode=755")
+	// syscall.Mount("devpts", "/dev/pts", "devpts", syscall.MS_NOEXEC|syscall.MS_NOSUID, "newinstance,ptmxmode=0666")
+	// syscall.Mknod("/dev/ptmx", syscall.S_IFCHR, int(unix.Mkdev(5, 2)))
+	// syscall.Setsid()
 }
 
 func pivotRoot(rootPath string) error {

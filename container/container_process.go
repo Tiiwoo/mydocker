@@ -19,6 +19,7 @@ import (
 func NewParentProcess(tty bool) (*exec.Cmd, *os.File) {
 	// 创建匿名管道用于传递参数，将 readPipe 作为子进程的 ExtraFiles，子进程从 readPipe 中读取参数
 	// 父进程中则通过 writePipe 将参数写入管道
+	// fmt.Println("===New===")
 	readPipe, writePipe, err := os.Pipe()
 	if err != nil {
 		log.Errorf("New pipe error %v", err)
@@ -44,6 +45,7 @@ func NewParentProcess(tty bool) (*exec.Cmd, *os.File) {
 		// 		Size:        1,
 		// 	},
 		// },
+		Setsid: true,
 	}
 	if tty {
 		cmd.Stdin = os.Stdin
@@ -97,6 +99,10 @@ func createDirs(rootPath string) {
 	if err := os.Mkdir(workURL, 0777); err != nil {
 		log.Errorf("mkdir dir %s error. %v", workURL, err)
 	}
+	mergedURL := rootPath + "merged/"
+	if err := os.Mkdir(mergedURL, 0777); err != nil {
+		log.Errorf("mkdir dir %s error. %v", workURL, err)
+	}
 }
 
 // 挂载 overlayfs
@@ -118,12 +124,18 @@ func mountOverlayFS(rootPath string, mntPath string) {
 
 // 容器退出时删除文件系统
 func DeleteWorkSpace(rootPath string, mntPath string) {
-	unmountOverlayFS(mntPath)
+	umountOverlayFS(mntPath)
 	deleteDirs(rootPath)
 }
 
-func unmountOverlayFS(mntPath string) {
+func umountOverlayFS(mntPath string) {
 	cmd := exec.Command("umount", mntPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		log.Errorf("%v", err)
+	}
+	cmd = exec.Command("umount", mntPath)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -147,11 +159,11 @@ func deleteDirs(rootPath string) {
 
 func PathExists(p string) (bool, error) {
 	_, err := os.Stat(p)
-	if err != nil {
+	if err == nil {
 		return true, nil
 	}
 	if os.IsNotExist(err) {
 		return false, nil
 	}
-	return false, nil
+	return false, err
 }

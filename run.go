@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"os"
 	"strings"
 
@@ -8,6 +9,7 @@ import (
 	"mydocker/cgroups/subsystems"
 	"mydocker/container"
 
+	"github.com/creack/pty"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -23,9 +25,20 @@ func Run(tty bool, cmdList []string, cfg *subsystems.ResourceConfig) {
 		log.Errorf("New parent process error")
 		return
 	}
-	if err := parent.Start(); err != nil {
-		log.Errorf("Run parent.Start err:%v", err)
+	// if err := parent.Start(); err != nil {
+	// 	log.Errorf("Run parent.Start err:%v", err)
+	// }
+	// 创建一个伪终端
+	ptmx, err := pty.Start(parent)
+	if err != nil {
+		panic(err)
 	}
+	// 确保在退出前关闭ptmx
+	defer func() { _ = ptmx.Close() }()
+	// 这里只是简单地将伪终端的输出复制到标准输出
+	go func() {
+		_, _ = io.Copy(os.Stdout, ptmx)
+	}()
 	// 创建 cgroup manager, 并通过调用 Set 和 Apply 设置资源限制并使限制在容器上生效
 	cgroupManager := cgroups.NewCgroupManager("mydocker-cgroup")
 	defer cgroupManager.Destroy()
@@ -36,7 +49,7 @@ func Run(tty bool, cmdList []string, cfg *subsystems.ResourceConfig) {
 	_ = parent.Wait()
 	// 需要运行完后删除相关目录
 	rootPath := "/root/"
-	mntPath := "/root/merged"
+	mntPath := "/root/merged/"
 	container.DeleteWorkSpace(rootPath, mntPath)
 }
 
