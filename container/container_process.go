@@ -1,7 +1,6 @@
 package container
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"syscall"
@@ -109,7 +108,7 @@ func createDirs(rootPath string) {
 // 挂载 overlayfs
 func mountOverlayFS(rootPath string, mntPath string) {
 	// 创建对应挂载目录
-	fmt.Println("Mount OverlayFS")
+	// fmt.Println("Mount OverlayFS")
 	if err := os.Mkdir(mntPath, 0777); err != nil {
 		log.Errorf("Mkdir dir %s error. %v", mntPath, err)
 	}
@@ -132,12 +131,6 @@ func DeleteWorkSpace(rootPath string, mntPath string) {
 
 func umountOverlayFS(mntPath string) {
 	cmd := exec.Command("umount", mntPath)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		log.Errorf("%v", err)
-	}
-	cmd = exec.Command("umount", mntPath)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {

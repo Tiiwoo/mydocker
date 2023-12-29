@@ -73,7 +73,7 @@ func readUserCommand() []string {
 // Init 挂载点
 func setUpMount() {
 	pwd, err := os.Getwd()
-	fmt.Println("PWD: " + pwd)
+	// fmt.Println("PWD: " + pwd)
 	if err != nil {
 		log.Errorf("Get current location error %v", err)
 		return
@@ -103,9 +103,11 @@ func pivotRoot(rootPath string) error {
 		为了使当前 root 的老 root 和新 root 不在同一个文件系统下，我们把 root 重新 mount 了一次
 		bind mount 是把相同的内容换了一个挂载点的挂载方法
 	*/
-	if err := syscall.Mount(rootPath, rootPath, "bind", syscall.MS_BIND|syscall.MS_REC, ""); err != nil {
-		return errors.Wrap(err, "mount rootfs to itself")
-	}
+	// pivotRoot 要求 newroot 是一个挂载点，但是在前面的时候已经通过 mount overlayfs 挂载过了
+	// 所以不需要再次挂载，否则会重复挂载
+	// if err := syscall.Mount(rootPath, rootPath, "", syscall.MS_BIND|syscall.MS_REC, ""); err != nil {
+	// 	return errors.Wrap(err, "mount rootfs to itself")
+	// }
 	// 创建 rootfs/.old_root 来存储 old root
 	oldDir := filepath.Join(rootPath, ".old_root")
 	if err := os.Mkdir(oldDir, 0777); err != nil {
