@@ -79,11 +79,15 @@ func setUpMount() {
 		return
 	}
 	log.Infof("Current location is %s", pwd)
-	pivotRoot(pwd)
+
+	syscall.Mount("", "/", "", syscall.MS_PRIVATE|syscall.MS_REC, "")
+	if err := pivotRoot(pwd); err != nil {
+		log.Errorf("Pivot Root error %v", err)
+	}
+	fmt.Println(os.Getwd())
 
 	// Mount /proc
 	defaultMountFlags := syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV
-	// syscall.Mount("", "/", "", syscall.MS_PRIVATE|syscall.MS_REC, "")
 	// mount --make-private /proc
 	// 防止在新的 namespace 中修改会传播到原来的 namespace 中
 	syscall.Mount("", "/proc", "", syscall.MS_PRIVATE|syscall.MS_REC, "")
@@ -105,13 +109,14 @@ func pivotRoot(rootPath string) error {
 	*/
 	// pivotRoot 要求 newroot 是一个挂载点，但是在前面的时候已经通过 mount overlayfs 挂载过了
 	// 所以不需要再次挂载，否则会重复挂载
-	// if err := syscall.Mount(rootPath, rootPath, "", syscall.MS_BIND|syscall.MS_REC, ""); err != nil {
+	// if err := syscall.Mount(rootPath, rootPath, "", syscall.MS_SLAVE|syscall.MS_BIND|syscall.MS_REC, ""); err != nil {
 	// 	return errors.Wrap(err, "mount rootfs to itself")
 	// }
 	// 创建 rootfs/.old_root 来存储 old root
-	oldDir := filepath.Join(rootPath, ".old_root")
+	// 不知道为什么，.old_root 会存在，创建不了，故修改为 .old_root1
+	oldDir := filepath.Join(rootPath, ".old_root1")
 	if err := os.Mkdir(oldDir, 0777); err != nil {
-		return err
+		return fmt.Errorf("mkdir %s error %v", oldDir, err)
 	}
 	// 系统调用 pivot_root 切换到新的 root，将老的 root 挂载到 rootfs/.old_root 下
 	if err := syscall.PivotRoot(rootPath, oldDir); err != nil {
@@ -122,11 +127,15 @@ func pivotRoot(rootPath string) error {
 		return fmt.Errorf("chdir %v", err)
 	}
 
-	oldDir = filepath.Join("/", ".old_root")
+	oldDir = filepath.Join("/", ".old_root1")
 	// unmount rootfs/.old_root
 	if err := syscall.Unmount(oldDir, syscall.MNT_DETACH); err != nil {
 		return fmt.Errorf("unmount old_root dir %v", err)
 	}
 	// 删除 .old_root 临时文件夹
-	return os.Remove(oldDir)
+	if err := os.Remove(oldDir); err != nil {
+		fmt.Printf("Remove dir %s error %v\n", oldDir, err)
+		return err
+	}
+	return nil
 }
