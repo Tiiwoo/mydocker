@@ -73,6 +73,7 @@ func readUserCommand() []string {
 // Init 挂载点
 func setUpMount() {
 	pwd, err := os.Getwd()
+	fmt.Println("PWD: " + pwd)
 	if err != nil {
 		log.Errorf("Get current location error %v", err)
 		return
