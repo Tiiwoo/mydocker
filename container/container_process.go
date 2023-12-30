@@ -88,8 +88,12 @@ func volumePathExtract(volume string) []string {
 func mountVolume(rootPath, mntPath string, volumePaths []string) {
 	// 第 0 个元素为宿主机目录
 	parentPath := volumePaths[0]
-	if err := os.Mkdir(parentPath, constant.Perm0777); err != nil {
-		log.Infof("mkdir parent dir %s error: %v", parentPath, err)
+	// 先判断宿主机目录是否已经创建
+	if _, err := os.Stat(parentPath); os.IsNotExist(err) {
+		err := os.Mkdir(parentPath, constant.Perm0777)
+		if err != nil {
+			log.Infof("mkdir parent dir %s error: %v", parentPath, err)
+		}
 	}
 	// 第 1 个元素为容器内部目录
 	containerPath := volumePaths[1]
@@ -138,10 +142,10 @@ func createDirs(rootPath string) {
 	if err := os.Mkdir(workURL, constant.Perm0777); err != nil {
 		log.Errorf("mkdir dir %s error: %v", workURL, err)
 	}
-	mergedURL := rootPath + "/merged"
-	if err := os.Mkdir(mergedURL, constant.Perm0777); err != nil {
-		log.Errorf("mkdir dir %s error: %v", workURL, err)
-	}
+	// mergedURL := rootPath + "/merged"
+	// if err := os.Mkdir(mergedURL, constant.Perm0777); err != nil {
+	// 	log.Errorf("mkdir dir %s error: %v", workURL, err)
+	// }
 }
 
 // 挂载 overlayfs
