@@ -46,6 +46,24 @@ func stopContainer(containerName string) {
 	}
 }
 
+func removeContainer(containerName string) {
+	containerInfo, err := getContainerInfoByName(containerName)
+	if err != nil {
+		log.Errorf("Get container %s info error: %v", containerName, err)
+		return
+	}
+	// 只删除 STOP 状态下的容器
+	if containerInfo.Status != container.STOP {
+		log.Errorf("Couldn't remove running container")
+		return
+	}
+	dirPath := fmt.Sprintf(container.InfoLocFormat, containerName)
+	if err = os.RemoveAll(dirPath); err != nil {
+		log.Errorf("Remove file %s error: %v", dirPath, err)
+		return
+	}
+}
+
 func getContainerInfoByName(containerName string) (*container.Info, error) {
 	dirPath := fmt.Sprintf(container.InfoLocFormat, containerName)
 	configFilePath := dirPath + container.ConfigName
