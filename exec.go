@@ -28,6 +28,9 @@ func ExecContainer(containerName string, cmdList []string) {
 		return
 	}
 
+	// /proc/self/exe exec 重新启动了一个进程，所以 C 代码会重新调用
+	// 新的进程启动时，它将继承父进程的环境变量和其他上下文信息
+	// 这个时候已经设置好了环境变量，C 代码就能正确运行
 	cmd := exec.Command("/proc/self/exe", "exec")
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
