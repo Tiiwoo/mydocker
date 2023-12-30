@@ -26,7 +26,12 @@ import (
 	去初始化容器的一些资源。
 */
 func Run(tty bool, cmdList []string, cfg *subsystems.ResourceConfig, volume, containerName string) {
-	parent, writePipe := container.NewParentProcess(tty, volume)
+	// 如果没有设置 containerName 则用 containerID 代替
+	containerID := randStringBytes(container.IDLength)
+	if containerName == "" {
+		containerName = containerID
+	}
+	parent, writePipe := container.NewParentProcess(tty, volume, containerName)
 	if parent == nil {
 		log.Errorf("new parent process error")
 		return
@@ -47,7 +52,7 @@ func Run(tty bool, cmdList []string, cfg *subsystems.ResourceConfig, volume, con
 	}()
 
 	// 记录 container 的 info
-	containerName, err = recordContainerInfo(parent.Process.Pid, cmdList, containerName)
+	err = recordContainerInfo(parent.Process.Pid, cmdList, containerName, containerID)
 	if err != nil {
 		log.Errorf("Record container info error %v", err)
 		return
@@ -64,6 +69,9 @@ func Run(tty bool, cmdList []string, cfg *subsystems.ResourceConfig, volume, con
 	if tty {
 		_ = parent.Wait()
 		deleteContainerInfo(containerName)
+		rootPath := "/root"
+		mntPath := "/root/merged"
+		container.DeleteWorkSpace(rootPath, mntPath, volume)
 	}
 	// 这里就不能在结束后删除了，因为要后台运行
 	// 需要运行完后删除相关目录
@@ -80,20 +88,16 @@ func sendInitCommand(cmdList []string, writePipe *os.File) {
 	_ = writePipe.Close()
 }
 
-func recordContainerInfo(containerPID int, cmdList []string, containerName string) (string, error) {
-	// 随机生成 10 位的容器 id
-	id := randStringBytes(container.IDLength)
+func recordContainerInfo(containerPID int, cmdList []string, containerName, containerID string) error {
 	// 生成容器的创建时间
-	createTime := time.Now().Format("2023-12-30 14:51:05")
-	// 如果未指定容器名，则使用随机生成的 containerID
-	if containerName == "" {
-		containerName = id
-	}
+	createTime := time.Now().Format("2006-01-02 15:04:05")
+	fmt.Println(createTime)
 	command := strings.Join(cmdList, "")
 	// 默认 Status 为 RUNNING
 	containerInfo := &container.Info{
 		Pid:         strconv.Itoa(containerPID),
-		Id:          id,
+		Id:          containerID,
+		Name:        containerName,
 		Command:     command,
 		CreatedTime: createTime,
 		Status:      container.RUNNING,
@@ -102,29 +106,29 @@ func recordContainerInfo(containerPID int, cmdList []string, containerName strin
 	jsonBytes, err := json.Marshal(containerInfo)
 	if err != nil {
 		log.Errorf("Record container info error: %v", err)
-		return "", err
+		return err
 	}
 	jsonStr := string(jsonBytes)
 	// 容器文件所在的路径
 	dirPath := fmt.Sprintf(container.InfoLocFormat, containerName)
 	if err := os.MkdirAll(dirPath, constant.Perm0622); err != nil {
 		log.Errorf("Mkdir %s error: %v", dirPath, err)
-		return "", err
+		return err
 	}
 	// 将容器信息写入文件
 	fileName := dirPath + "/" + container.ConfigName
 	file, err := os.Create(fileName)
 	if err != nil {
 		log.Errorf("Create file %s error: %v", fileName, err)
-		return "", err
+		return err
 	}
 	defer file.Close()
 	// 将内容写入文件中
 	if _, err := file.WriteString(jsonStr); err != nil {
 		log.Errorf("File write string error: %v", err)
-		return "", err
+		return err
 	}
-	return containerName, nil
+	return nil
 }
 
 func deleteContainerInfo(containerName string) {
