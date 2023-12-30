@@ -35,6 +35,10 @@ var runCommand = cli.Command{
 			Name:  "mem",
 			Usage: "set memory limit",
 		},
+		cli.StringFlag{
+			Name:  "v",
+			Usage: "volume",
+		},
 	},
 	/*
 		这里是 run 命令执行的真正函数
@@ -60,9 +64,10 @@ var runCommand = cli.Command{
 			CpuSet:      context.String("cpuset"),
 			MemoryLimit: context.String("mem"),
 		}
-		log.Info("Config: ", cfg)
+		// log.Info("Config: ", cfg)
+		volume := context.String("v")
 
-		Run(tty, cmdList, cfg)
+		Run(tty, cmdList, cfg, volume)
 		return nil
 	},
 }

@@ -19,10 +19,10 @@ import (
 	进程，然后在子进程中，调用 /proc/self/exe，也就是调用自己，发送 init 参数，调用我们写的 init 方法，
 	去初始化容器的一些资源。
 */
-func Run(tty bool, cmdList []string, cfg *subsystems.ResourceConfig) {
-	parent, writePipe := container.NewParentProcess(tty)
+func Run(tty bool, cmdList []string, cfg *subsystems.ResourceConfig, volume string) {
+	parent, writePipe := container.NewParentProcess(tty, volume)
 	if parent == nil {
-		log.Errorf("New parent process error")
+		log.Errorf("new parent process error")
 		return
 	}
 	// if err := parent.Start(); err != nil {
@@ -48,15 +48,15 @@ func Run(tty bool, cmdList []string, cfg *subsystems.ResourceConfig) {
 	sendInitCommand(cmdList, writePipe)
 	_ = parent.Wait()
 	// 需要运行完后删除相关目录
-	rootPath := "/root/"
-	mntPath := "/root/merged/"
-	container.DeleteWorkSpace(rootPath, mntPath)
+	rootPath := "/root"
+	mntPath := "/root/merged"
+	container.DeleteWorkSpace(rootPath, mntPath, volume)
 }
 
 // sendInitCommand 通过 writePipe 将指令发送给子进程
 func sendInitCommand(cmdList []string, writePipe *os.File) {
 	command := strings.Join(cmdList, " ")
-	log.Infof("command all is %s", command)
+	log.Infof("command all is: %s", command)
 	_, _ = writePipe.WriteString(command)
 	_ = writePipe.Close()
 }

@@ -1,8 +1,10 @@
 package container
 
 import (
+	"mydocker/constant"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 
 	log "github.com/sirupsen/logrus"
@@ -16,7 +18,7 @@ import (
 	3. 下面的 clone 参数就是去 fork 出来一个新进程，并且使用了 namespace 隔离新创建的进程和外部环境。
 	4. 如果用户指定了 -it 参数，就需要把当前进程的输入输出导入到标准输入输出上
 */
-func NewParentProcess(tty bool) (*exec.Cmd, *os.File) {
+func NewParentProcess(tty bool, volume string) (*exec.Cmd, *os.File) {
 	// 创建匿名管道用于传递参数，将 readPipe 作为子进程的 ExtraFiles，子进程从 readPipe 中读取参数
 	// 父进程中则通过 writePipe 将参数写入管道
 	// fmt.Println("===New===")
@@ -55,53 +57,90 @@ func NewParentProcess(tty bool) (*exec.Cmd, *os.File) {
 	cmd.ExtraFiles = []*os.File{readPipe}
 	// 指定 rootfs
 	// cmd.Dir = "/root/busybox"
-	rootPath := "/root/"
-	mntPath := "/root/merged/"
-	NewWorkSpace(rootPath, mntPath)
+	rootPath := "/root"
+	mntPath := "/root/merged"
+	NewWorkSpace(rootPath, mntPath, volume)
 	cmd.Dir = mntPath
 	return cmd, writePipe
 }
 
-func NewWorkSpace(rootPath string, mntPath string) {
+func NewWorkSpace(rootPath, mntPath, volume string) {
 	createLower(rootPath)
 	createDirs(rootPath)
 	mountOverlayFS(rootPath, mntPath)
+	if volume != "" {
+		volumePaths := volumePathExtract(volume)
+		if len(volumePaths) == 2 && volumePaths[0] != "" && volumePaths[1] != "" {
+			mountVolume(rootPath, mntPath, volumePaths)
+			log.Infof("volumePath: %s", volumePaths)
+		} else {
+			log.Infof("volume parameter input is not correct.")
+		}
+	}
+}
+
+// volumePathExtract 通过冒号分割解析 volume 目录，比如 -v /tmp:/tmp
+func volumePathExtract(volume string) []string {
+	volumePaths := strings.Split(volume, ":")
+	return volumePaths
+}
+
+func mountVolume(rootPath, mntPath string, volumePaths []string) {
+	// 第 0 个元素为宿主机目录
+	parentPath := volumePaths[0]
+	if err := os.Mkdir(parentPath, constant.Perm0777); err != nil {
+		log.Infof("mkdir parent dir %s error: %v", parentPath, err)
+	}
+	// 第 1 个元素为容器内部目录
+	containerPath := volumePaths[1]
+	containerVolumePath := mntPath + "/" + containerPath
+	if err := os.Mkdir(containerVolumePath, constant.Perm0777); err != nil {
+		log.Infof("mkdir container dir %s error: %v", containerVolumePath, err)
+	}
+	// 通过 bind mount 将宿主机目录挂载到容器中
+	// mount -o bind /hostPath /containerPath
+	cmd := exec.Command("mount", "-o", "bind", parentPath, containerVolumePath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		log.Errorf("mount volume failed: %v", err)
+	}
 }
 
 // Create Lower
 func createLower(rootPath string) {
 	// 使用 busybox 作为 overlayfs 的 lower 层
-	busyboxPath := rootPath + "busybox/"
-	busyboxTarPath := rootPath + "busybox.tar"
+	busyboxPath := rootPath + "/busybox"
+	busyboxTarPath := rootPath + "/busybox.tar"
 	// 检查 busybox 路径是否已经存在
 	exist, err := PathExists(busyboxPath)
 	if err != nil {
-		log.Infof("Fail to judge whether dir %s exists. %v", busyboxPath, err)
+		log.Infof("fail to judge whether dir %s exists: %v", busyboxPath, err)
 	}
 	// 不存在则创建目录并将 busybox.tar 解压到 busybox 文件夹中
 	if !exist {
-		if err := os.Mkdir(busyboxPath, 0777); err != nil {
-			log.Errorf("Mkdir dir %s error. %v", busyboxPath, err)
+		if err := os.Mkdir(busyboxPath, constant.Perm0777); err != nil {
+			log.Errorf("mkdir dir %s error: %v", busyboxPath, err)
 		}
 		if _, err := exec.Command("tar", "-xvf", busyboxTarPath, "-C", busyboxPath).CombinedOutput(); err != nil {
-			log.Errorf("Untar dir %s error %v", busyboxPath, err)
+			log.Errorf("untar dir %s error: %v", busyboxPath, err)
 		}
 	}
 }
 
 // 创建 overlayfs 的 upper 以及 worker 目录
 func createDirs(rootPath string) {
-	upperURL := rootPath + "upper/"
-	if err := os.Mkdir(upperURL, 0777); err != nil {
-		log.Errorf("mkdir dir %s error. %v", upperURL, err)
+	upperURL := rootPath + "/upper"
+	if err := os.Mkdir(upperURL, constant.Perm0777); err != nil {
+		log.Errorf("mkdir dir %s error: %v", upperURL, err)
 	}
-	workURL := rootPath + "work/"
-	if err := os.Mkdir(workURL, 0777); err != nil {
-		log.Errorf("mkdir dir %s error. %v", workURL, err)
+	workURL := rootPath + "/work"
+	if err := os.Mkdir(workURL, constant.Perm0777); err != nil {
+		log.Errorf("mkdir dir %s error: %v", workURL, err)
 	}
-	mergedURL := rootPath + "merged/"
-	if err := os.Mkdir(mergedURL, 0777); err != nil {
-		log.Errorf("mkdir dir %s error. %v", workURL, err)
+	mergedURL := rootPath + "/merged"
+	if err := os.Mkdir(mergedURL, constant.Perm0777); err != nil {
+		log.Errorf("mkdir dir %s error: %v", workURL, err)
 	}
 }
 
@@ -109,24 +148,43 @@ func createDirs(rootPath string) {
 func mountOverlayFS(rootPath string, mntPath string) {
 	// 创建对应挂载目录
 	// fmt.Println("Mount OverlayFS")
-	if err := os.Mkdir(mntPath, 0777); err != nil {
-		log.Errorf("Mkdir dir %s error. %v", mntPath, err)
+	if err := os.Mkdir(mntPath, constant.Perm0777); err != nil {
+		log.Errorf("mkdir dir %s error: %v", mntPath, err)
 	}
 	// lowerdir=/root/busybox,upperdir=/root/upper,workdir=/root/merged
-	dirs := "lowerdir=" + rootPath + "busybox" + ",upperdir=" + rootPath + "upper" + ",workdir=" + rootPath + "work"
+	dirs := "lowerdir=" + rootPath + "/busybox" + ",upperdir=" + rootPath + "/upper" + ",workdir=" + rootPath + "/work"
 	// mount -t overlay overlay -o lowerdir=/root/busybox,upperdir=/root/upper,workdir=/root/work /root/merged
 	cmd := exec.Command("mount", "-t", "overlay", "overlay", "-o", dirs, mntPath)
+	log.Infof("mountOverlayFS cmd: %s", cmd.String())
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		log.Errorf("%v", err)
+		log.Errorf("mountOverlayFS mount error: %v", err)
 	}
 }
 
 // 容器退出时删除文件系统
-func DeleteWorkSpace(rootPath string, mntPath string) {
+func DeleteWorkSpace(rootPath string, mntPath string, volume string) {
+	// 先判断是否有 volume 挂载，如果有则要先 umount volume
+	if volume != "" {
+		volumePaths := volumePathExtract(volume)
+		l := len(volumePaths)
+		if l == 2 && volumePaths[0] != "" && volumePaths[1] != "" {
+			umountVolume(mntPath, volumePaths)
+		}
+	}
 	umountOverlayFS(mntPath)
 	deleteDirs(rootPath)
+}
+
+func umountVolume(mntPath string, volumePaths []string) {
+	containerPath := mntPath + "/" + volumePaths[1]
+	cmd := exec.Command("umount", containerPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		log.Errorf("umount volume failed: %v", err)
+	}
 }
 
 func umountOverlayFS(mntPath string) {
@@ -137,18 +195,18 @@ func umountOverlayFS(mntPath string) {
 		log.Errorf("%v", err)
 	}
 	if err := os.RemoveAll(mntPath); err != nil {
-		log.Errorf("Remove dir %s error %v", mntPath, err)
+		log.Errorf("remove dir %s error: %v", mntPath, err)
 	}
 }
 
 func deleteDirs(rootPath string) {
-	writePath := rootPath + "upper/"
+	writePath := rootPath + "/upper"
 	if err := os.RemoveAll(writePath); err != nil {
-		log.Errorf("Remove dir %s error %v", writePath, err)
+		log.Errorf("remove dir %s error: %v", writePath, err)
 	}
-	workPath := rootPath + "work"
+	workPath := rootPath + "/work"
 	if err := os.RemoveAll(workPath); err != nil {
-		log.Errorf("Remove dir %s error %v", workPath, err)
+		log.Errorf("remove dir %s error: %v", workPath, err)
 	}
 }
 

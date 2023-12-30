@@ -3,6 +3,7 @@ package container
 import (
 	"fmt"
 	"io"
+	"mydocker/constant"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -32,7 +33,7 @@ func RunContainerInitProcess() error {
 
 	path, err := exec.LookPath(cmdList[0])
 	if err != nil {
-		log.Errorf("Exec loop path error %v", err)
+		log.Errorf("Exec loop path error: %v", err)
 		return err
 	}
 	// 设置容器内部 hostname
@@ -63,7 +64,7 @@ func readUserCommand() []string {
 	pipe := os.NewFile(uintptr(fdIndex), "pipe")
 	msg, err := io.ReadAll(pipe)
 	if err != nil {
-		log.Errorf("init read pipe error %v", err)
+		log.Errorf("init read pipe error: %v", err)
 		return nil
 	}
 	msgStr := string(msg)
@@ -75,16 +76,14 @@ func setUpMount() {
 	pwd, err := os.Getwd()
 	// fmt.Println("PWD: " + pwd)
 	if err != nil {
-		log.Errorf("Get current location error %v", err)
+		log.Errorf("get current location error: %v", err)
 		return
 	}
-	log.Infof("Current location is %s", pwd)
+	log.Infof("current location is: %s", pwd)
 
 	syscall.Mount("", "/", "", syscall.MS_PRIVATE|syscall.MS_REC, "")
-	if err := pivotRoot(pwd); err != nil {
-		log.Errorf("Pivot Root error %v", err)
-	}
-	fmt.Println(os.Getwd())
+	pivotRoot(pwd)
+	// fmt.Println(os.Getwd())
 
 	// Mount /proc
 	defaultMountFlags := syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV
@@ -115,12 +114,12 @@ func pivotRoot(rootPath string) error {
 	// 创建 rootfs/.old_root 来存储 old root
 	// 不知道为什么，.old_root 会存在，创建不了，故修改为 .old_root1
 	oldDir := filepath.Join(rootPath, ".old_root1")
-	if err := os.Mkdir(oldDir, 0777); err != nil {
-		return fmt.Errorf("mkdir %s error %v", oldDir, err)
+	if err := os.Mkdir(oldDir, constant.Perm0777); err != nil {
+		return fmt.Errorf("mkdir %s error: %v", oldDir, err)
 	}
 	// 系统调用 pivot_root 切换到新的 root，将老的 root 挂载到 rootfs/.old_root 下
 	if err := syscall.PivotRoot(rootPath, oldDir); err != nil {
-		return fmt.Errorf("pivot_root %v", err)
+		return fmt.Errorf("pivot_root error: %v", err)
 	}
 	// 修改当前目录到 "/"
 	if err := os.Chdir("/"); err != nil {
@@ -130,11 +129,11 @@ func pivotRoot(rootPath string) error {
 	oldDir = filepath.Join("/", ".old_root1")
 	// unmount rootfs/.old_root
 	if err := syscall.Unmount(oldDir, syscall.MNT_DETACH); err != nil {
-		return fmt.Errorf("unmount old_root dir %v", err)
+		return fmt.Errorf("unmount old_root dir error: %v", err)
 	}
 	// 删除 .old_root 临时文件夹
 	if err := os.Remove(oldDir); err != nil {
-		fmt.Printf("Remove dir %s error %v\n", oldDir, err)
+		fmt.Printf("Remove dir %s error: %v\n", oldDir, err)
 		return err
 	}
 	return nil
