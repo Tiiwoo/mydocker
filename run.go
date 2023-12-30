@@ -1,12 +1,18 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"io"
+	"math/rand"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"mydocker/cgroups"
 	"mydocker/cgroups/subsystems"
+	"mydocker/constant"
 	"mydocker/container"
 
 	"github.com/creack/pty"
@@ -19,7 +25,7 @@ import (
 	进程，然后在子进程中，调用 /proc/self/exe，也就是调用自己，发送 init 参数，调用我们写的 init 方法，
 	去初始化容器的一些资源。
 */
-func Run(tty bool, cmdList []string, cfg *subsystems.ResourceConfig, volume string) {
+func Run(tty bool, cmdList []string, cfg *subsystems.ResourceConfig, volume, containerName string) {
 	parent, writePipe := container.NewParentProcess(tty, volume)
 	if parent == nil {
 		log.Errorf("new parent process error")
@@ -39,6 +45,14 @@ func Run(tty bool, cmdList []string, cfg *subsystems.ResourceConfig, volume stri
 	go func() {
 		_, _ = io.Copy(os.Stdout, ptmx)
 	}()
+
+	// 记录 container 的 info
+	containerName, err = recordContainerInfo(parent.Process.Pid, cmdList, containerName)
+	if err != nil {
+		log.Errorf("Record container info error %v", err)
+		return
+	}
+
 	// 创建 cgroup manager, 并通过调用 Set 和 Apply 设置资源限制并使限制在容器上生效
 	cgroupManager := cgroups.NewCgroupManager("mydocker-cgroup")
 	defer cgroupManager.Destroy()
@@ -46,11 +60,16 @@ func Run(tty bool, cmdList []string, cfg *subsystems.ResourceConfig, volume stri
 	_ = cgroupManager.Apply(parent.Process.Pid, cfg)
 	// 在子进程创建后才能通过管道来发送参数
 	sendInitCommand(cmdList, writePipe)
-	_ = parent.Wait()
+	// 只有设置了 tty 才需要 Wait
+	if tty {
+		_ = parent.Wait()
+		deleteContainerInfo(containerName)
+	}
+	// 这里就不能在结束后删除了，因为要后台运行
 	// 需要运行完后删除相关目录
-	rootPath := "/root"
-	mntPath := "/root/merged"
-	container.DeleteWorkSpace(rootPath, mntPath, volume)
+	// rootPath := "/root"
+	// mntPath := "/root/merged"
+	// container.DeleteWorkSpace(rootPath, mntPath, volume)
 }
 
 // sendInitCommand 通过 writePipe 将指令发送给子进程
@@ -59,4 +78,69 @@ func sendInitCommand(cmdList []string, writePipe *os.File) {
 	log.Infof("command all is: %s", command)
 	_, _ = writePipe.WriteString(command)
 	_ = writePipe.Close()
+}
+
+func recordContainerInfo(containerPID int, cmdList []string, containerName string) (string, error) {
+	// 随机生成 10 位的容器 id
+	id := randStringBytes(container.IDLength)
+	// 生成容器的创建时间
+	createTime := time.Now().Format("2023-12-30 14:51:05")
+	// 如果未指定容器名，则使用随机生成的 containerID
+	if containerName == "" {
+		containerName = id
+	}
+	command := strings.Join(cmdList, "")
+	// 默认 Status 为 RUNNING
+	containerInfo := &container.Info{
+		Pid:         strconv.Itoa(containerPID),
+		Id:          id,
+		Command:     command,
+		CreatedTime: createTime,
+		Status:      container.RUNNING,
+	}
+
+	jsonBytes, err := json.Marshal(containerInfo)
+	if err != nil {
+		log.Errorf("Record container info error: %v", err)
+		return "", err
+	}
+	jsonStr := string(jsonBytes)
+	// 容器文件所在的路径
+	dirPath := fmt.Sprintf(container.InfoLocFormat, containerName)
+	if err := os.MkdirAll(dirPath, constant.Perm0622); err != nil {
+		log.Errorf("Mkdir %s error: %v", dirPath, err)
+		return "", err
+	}
+	// 将容器信息写入文件
+	fileName := dirPath + "/" + container.ConfigName
+	file, err := os.Create(fileName)
+	if err != nil {
+		log.Errorf("Create file %s error: %v", fileName, err)
+		return "", err
+	}
+	defer file.Close()
+	// 将内容写入文件中
+	if _, err := file.WriteString(jsonStr); err != nil {
+		log.Errorf("File write string error: %v", err)
+		return "", err
+	}
+	return containerName, nil
+}
+
+func deleteContainerInfo(containerName string) {
+	dirPath := fmt.Sprintf(container.InfoLocFormat, containerName)
+	if err := os.RemoveAll(dirPath); err != nil {
+		log.Errorf("Remove dir %s error: %v", dirPath, err)
+	}
+}
+
+func randStringBytes(n int) string {
+	letterBytes := "1234567890"
+	source := rand.NewSource(time.Now().UnixNano())
+	r := rand.New(source)
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letterBytes[r.Intn(len(letterBytes))]
+	}
+	return string(b)
 }

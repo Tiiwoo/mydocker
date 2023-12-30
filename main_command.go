@@ -19,6 +19,14 @@ var runCommand = cli.Command{
 			Name:  "it", // 简单起见，这里把 -i 和 -t 参数合并成一个
 			Usage: "enable tty",
 		},
+		cli.BoolFlag{
+			Name:  "d",
+			Usage: "detach container",
+		},
+		cli.StringFlag{
+			Name:  "name",
+			Usage: "container name",
+		},
 		cli.StringFlag{
 			Name:  "cpu",
 			Usage: "set cpu quota",
@@ -58,6 +66,14 @@ var runCommand = cli.Command{
 
 		// 查找是否有上面定义的 BoolFlag "it"
 		tty := context.Bool("it")
+		detach := context.Bool("d")
+
+		// tty 和 detach 不能同时提供
+		if tty && detach {
+			return fmt.Errorf("-it and -d parameter can not use together")
+		}
+		log.Infof("createTty %v", tty)
+
 		cfg := &subsystems.ResourceConfig{
 			CpuCfsQuota: context.Int("cpu"),
 			CpuShare:    context.String("cpushare"),
@@ -67,7 +83,8 @@ var runCommand = cli.Command{
 		// log.Info("Config: ", cfg)
 		volume := context.String("v")
 
-		Run(tty, cmdList, cfg, volume)
+		containerName := context.String("name")
+		Run(tty, cmdList, cfg, volume, containerName)
 		return nil
 	},
 }
@@ -95,6 +112,15 @@ var commitCommand = cli.Command{
 		}
 		imgName := context.Args().Get(0)
 		commitContainer(imgName)
+		return nil
+	},
+}
+
+var listCommand = cli.Command{
+	Name: "ps",
+	Usage: "list all the containers",
+	Action: func(context *cli.Context) error {
+		ListContainers()
 		return nil
 	},
 }
