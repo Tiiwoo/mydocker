@@ -85,3 +85,16 @@ var initCommand = cli.Command{
 		return err
 	},
 }
+
+var commitCommand = cli.Command{
+	Name:  "commit",
+	Usage: "commit container into image",
+	Action: func(context *cli.Context) error {
+		if len(context.Args()) < 1 {
+			return fmt.Errorf("missing container name")
+		}
+		imgName := context.Args().Get(0)
+		commitContainer(imgName)
+		return nil
+	},
+}

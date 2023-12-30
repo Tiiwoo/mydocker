@@ -136,5 +136,9 @@ func pivotRoot(rootPath string) error {
 		fmt.Printf("Remove dir %s error: %v\n", oldDir, err)
 		return err
 	}
+	if err := os.Remove("/.old_root"); err != nil {
+		fmt.Printf("Remove dir %s error: %v\n", oldDir, err)
+		return err
+	}
 	return nil
 }
