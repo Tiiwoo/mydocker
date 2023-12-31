@@ -69,9 +69,11 @@ func Run(tty bool, cmdList []string, cfg *subsystems.ResourceConfig, volume, con
 	if tty {
 		_ = parent.Wait()
 		deleteContainerInfo(volume, containerName)
-		// rootPath := "/root"
-		// mntPath := "/root/merged"
-		// container.DeleteWorkSpace(rootPath, mntPath, volume)
+		// containerInfo, _ := getContainerInfoByName(containerName)
+		// err = container.DeleteWorkSpace(containerInfo.Volume, containerName)
+		// if err != nil {
+		// 	log.Errorf("DeleteWorkSpace error %v", err)
+		// }
 	}
 	// 这里就不能在结束后删除了，因为要后台运行
 	// 需要运行完后删除相关目录
