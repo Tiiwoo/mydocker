@@ -128,9 +128,9 @@ func mountOverlayFS(containerName string) error {
 		work   = getWorker(containerName)
 		merged = getMerged(containerName)
 	)
-	// lowerdir=/root/busybox,upperdir=/root/upper,workdir=/root/merged
+	// lowerdir=/root/lower,upperdir=/root/upper,workdir=/root/merged
 	dirs := getOverlayFSDirs(lower, upper, work)
-	// mount -t overlay overlay -o lowerdir=/root/busybox,upperdir=/root/upper,workdir=/root/work /root/merged
+	// mount -t overlay overlay -o lowerdir=/root/lower,upperdir=/root/upper,workdir=/root/work /root/merged
 	cmd := exec.Command("mount", "-t", "overlay", "overlay", "-o", dirs, merged)
 	log.Infof("mountOverlayFS cmd: %s", cmd.String())
 	cmd.Stdout = os.Stdout
