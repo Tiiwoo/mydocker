@@ -49,7 +49,7 @@ type Info struct {
 	3. 下面的 clone 参数就是去 fork 出来一个新进程，并且使用了 namespace 隔离新创建的进程和外部环境。
 	4. 如果用户指定了 -it 参数，就需要把当前进程的输入输出导入到标准输入输出上
 */
-func NewParentProcess(tty bool, volume, containerName, imageName string) (*exec.Cmd, *os.File) {
+func NewParentProcess(tty bool, volume, containerName, imageName string, envSlice []string) (*exec.Cmd, *os.File) {
 	// 创建匿名管道用于传递参数，将 readPipe 作为子进程的 ExtraFiles，子进程从 readPipe 中读取参数
 	// 父进程中则通过 writePipe 将参数写入管道
 	// fmt.Println("===New===")
@@ -106,6 +106,7 @@ func NewParentProcess(tty bool, volume, containerName, imageName string) (*exec.
 	// NewWorkSpace(rootPath, mntPath, volume)
 	// cmd.Dir = mntPath
 	cmd.Dir = fmt.Sprintf(mergedDirFormat, containerName)
+	cmd.Env = append(os.Environ(), envSlice...)
 	NewWorkSpace(volume, imageName, containerName)
 	return cmd, writePipe
 }

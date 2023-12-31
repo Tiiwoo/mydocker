@@ -25,13 +25,13 @@ import (
 	进程，然后在子进程中，调用 /proc/self/exe，也就是调用自己，发送 init 参数，调用我们写的 init 方法，
 	去初始化容器的一些资源。
 */
-func Run(tty bool, cmdList []string, cfg *subsystems.ResourceConfig, volume, containerName, imageName string) {
+func Run(tty bool, cmdList []string, cfg *subsystems.ResourceConfig, volume, containerName, imageName string, envSlice []string) {
 	// 如果没有设置 containerName 则用 containerID 代替
 	containerID := randStringBytes(container.IDLength)
 	if containerName == "" {
 		containerName = containerID
 	}
-	parent, writePipe := container.NewParentProcess(tty, volume, containerName, imageName)
+	parent, writePipe := container.NewParentProcess(tty, volume, containerName, imageName, envSlice)
 	if parent == nil {
 		log.Errorf("new parent process error")
 		return
