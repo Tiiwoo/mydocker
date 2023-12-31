@@ -14,7 +14,7 @@ import (
 var runCommand = cli.Command{
 	Name: "run",
 	Usage: `Create a container with namespace and cgroups limit
-			mydocker run -it [command]`,
+			mydocker run -it [image] [command]`,
 	Flags: []cli.Flag{
 		cli.BoolFlag{
 			Name:  "it", // 简单起见，这里把 -i 和 -t 参数合并成一个
@@ -65,6 +65,9 @@ var runCommand = cli.Command{
 			cmdList = append(cmdList, arg)
 		}
 
+		imageName := cmdList[0]
+		cmdList = cmdList[1:]
+
 		// 查找是否有上面定义的 BoolFlag "it"
 		tty := context.Bool("it")
 		detach := context.Bool("d")
@@ -85,7 +88,7 @@ var runCommand = cli.Command{
 		volume := context.String("v")
 
 		containerName := context.String("name")
-		Run(tty, cmdList, cfg, volume, containerName)
+		Run(tty, cmdList, cfg, volume, containerName, imageName)
 		return nil
 	},
 }
@@ -108,12 +111,12 @@ var commitCommand = cli.Command{
 	Name:  "commit",
 	Usage: "commit container into image",
 	Action: func(context *cli.Context) error {
-		if len(context.Args()) < 1 {
-			return fmt.Errorf("missing container name")
+		if len(context.Args()) < 2 {
+			return fmt.Errorf("missing container name and image name")
 		}
-		imgName := context.Args().Get(0)
-		commitContainer(imgName)
-		return nil
+		containerName := context.Args().Get(0)
+		imageName := context.Args().Get(1)
+		return container.Commit(containerName, imageName)
 	},
 }
 

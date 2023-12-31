@@ -25,13 +25,13 @@ import (
 	进程，然后在子进程中，调用 /proc/self/exe，也就是调用自己，发送 init 参数，调用我们写的 init 方法，
 	去初始化容器的一些资源。
 */
-func Run(tty bool, cmdList []string, cfg *subsystems.ResourceConfig, volume, containerName string) {
+func Run(tty bool, cmdList []string, cfg *subsystems.ResourceConfig, volume, containerName, imageName string) {
 	// 如果没有设置 containerName 则用 containerID 代替
 	containerID := randStringBytes(container.IDLength)
 	if containerName == "" {
 		containerName = containerID
 	}
-	parent, writePipe := container.NewParentProcess(tty, volume, containerName)
+	parent, writePipe := container.NewParentProcess(tty, volume, containerName, imageName)
 	if parent == nil {
 		log.Errorf("new parent process error")
 		return
@@ -52,7 +52,7 @@ func Run(tty bool, cmdList []string, cfg *subsystems.ResourceConfig, volume, con
 	}()
 
 	// 记录 container 的 info
-	err = recordContainerInfo(parent.Process.Pid, cmdList, containerName, containerID)
+	err = recordContainerInfo(parent.Process.Pid, cmdList, containerName, containerID, volume)
 	if err != nil {
 		log.Errorf("Record container info error %v", err)
 		return
@@ -68,10 +68,10 @@ func Run(tty bool, cmdList []string, cfg *subsystems.ResourceConfig, volume, con
 	// 只有设置了 tty 才需要 Wait
 	if tty {
 		_ = parent.Wait()
-		deleteContainerInfo(containerName)
-		rootPath := "/root"
-		mntPath := "/root/merged"
-		container.DeleteWorkSpace(rootPath, mntPath, volume)
+		deleteContainerInfo(volume, containerName)
+		// rootPath := "/root"
+		// mntPath := "/root/merged"
+		// container.DeleteWorkSpace(rootPath, mntPath, volume)
 	}
 	// 这里就不能在结束后删除了，因为要后台运行
 	// 需要运行完后删除相关目录
@@ -88,7 +88,7 @@ func sendInitCommand(cmdList []string, writePipe *os.File) {
 	_ = writePipe.Close()
 }
 
-func recordContainerInfo(containerPID int, cmdList []string, containerName, containerID string) error {
+func recordContainerInfo(containerPID int, cmdList []string, containerName, containerID, volume string) error {
 	// 生成容器的创建时间
 	createTime := time.Now().Format("2006-01-02 15:04:05")
 	fmt.Println(createTime)
@@ -101,6 +101,7 @@ func recordContainerInfo(containerPID int, cmdList []string, containerName, cont
 		Command:     command,
 		CreatedTime: createTime,
 		Status:      container.RUNNING,
+		Volume:      volume,
 	}
 
 	jsonBytes, err := json.Marshal(containerInfo)
@@ -131,7 +132,7 @@ func recordContainerInfo(containerPID int, cmdList []string, containerName, cont
 	return nil
 }
 
-func deleteContainerInfo(containerName string) {
+func deleteContainerInfo(volume, containerName string) {
 	dirPath := fmt.Sprintf(container.InfoLocFormat, containerName)
 	if err := os.RemoveAll(dirPath); err != nil {
 		log.Errorf("Remove dir %s error: %v", dirPath, err)
