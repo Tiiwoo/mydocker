@@ -101,7 +101,7 @@ func (d *BridgeNetworkDriver) initBridge(n *Network) error {
 		return errors.Wrapf(err, "Error set bridge ip: %s on bridge: %s", gatewayIP.String(), bridgeName)
 	}
 	// 3. 启动 Bridge 设备
-	if err := setInterfaceUp(bridgeName); err != nil {
+	if err := setInterfaceUP(bridgeName); err != nil {
 		return errors.Wrapf(err, "Failed to set %s up", bridgeName)
 	}
 	// 4. 设置 iptables SNAT 规则
@@ -162,7 +162,7 @@ func setInterfaceIP(name, rawIP string) error {
 	return netlink.AddrAdd(iface, addr)
 }
 
-func setInterfaceUp(interfaceName string) error {
+func setInterfaceUP(interfaceName string) error {
 	link, err := netlink.LinkByName(interfaceName)
 	if err != nil {
 		return errors.Wrapf(err, "error retrieving a link named [ %s ]:", link.Attrs().Name)

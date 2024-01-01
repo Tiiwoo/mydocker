@@ -19,6 +19,9 @@ func ListContainers() {
 	}
 	containers := make([]*container.Info, 0, len(files))
 	for _, file := range files {
+		if file.Name() == "network" {
+			continue
+		}
 		fileInfo, _ := file.Info()
 		c, err := getContainerInfo(fileInfo)
 		if err != nil {

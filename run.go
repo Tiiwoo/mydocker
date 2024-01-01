@@ -14,6 +14,7 @@ import (
 	"mydocker/cgroups/subsystems"
 	"mydocker/constant"
 	"mydocker/container"
+	"mydocker/network"
 
 	"github.com/creack/pty"
 	log "github.com/sirupsen/logrus"
@@ -25,7 +26,7 @@ import (
 	进程，然后在子进程中，调用 /proc/self/exe，也就是调用自己，发送 init 参数，调用我们写的 init 方法，
 	去初始化容器的一些资源。
 */
-func Run(tty bool, cmdList []string, cfg *subsystems.ResourceConfig, volume, containerName, imageName string, envSlice []string) {
+func Run(tty bool, cmdList []string, cfg *subsystems.ResourceConfig, volume, containerName, imageName string, envSlice []string, nw string, portMapping []string) {
 	// 如果没有设置 containerName 则用 containerID 代替
 	containerID := randStringBytes(container.IDLength)
 	if containerName == "" {
@@ -63,12 +64,29 @@ func Run(tty bool, cmdList []string, cfg *subsystems.ResourceConfig, volume, con
 	defer cgroupManager.Destroy()
 	_ = cgroupManager.Set(cfg)
 	_ = cgroupManager.Apply(parent.Process.Pid, cfg)
+
+	if nw != "" {
+		// config container network
+		network.Init()
+		containerInfo := &container.Info{
+			Id:          containerID,
+			Pid:         strconv.Itoa(parent.Process.Pid),
+			Name:        containerName,
+			PortMapping: portMapping,
+		}
+		if err = network.Connect(nw, containerInfo); err != nil {
+			log.Errorf("Error Connect Network %v", err)
+			return
+		}
+	}
+
 	// 在子进程创建后才能通过管道来发送参数
 	sendInitCommand(cmdList, writePipe)
 	// 只有设置了 tty 才需要 Wait
 	if tty {
 		_ = parent.Wait()
-		deleteContainerInfo(volume, containerName)
+		deleteContainerInfo(containerName)
+		_ = container.DeleteWorkSpace(volume, containerName)
 		// containerInfo, _ := getContainerInfoByName(containerName)
 		// err = container.DeleteWorkSpace(containerInfo.Volume, containerName)
 		// if err != nil {
@@ -134,7 +152,7 @@ func recordContainerInfo(containerPID int, cmdList []string, containerName, cont
 	return nil
 }
 
-func deleteContainerInfo(volume, containerName string) {
+func deleteContainerInfo(containerName string) {
 	dirPath := fmt.Sprintf(container.InfoLocFormat, containerName)
 	if err := os.RemoveAll(dirPath); err != nil {
 		log.Errorf("Remove dir %s error: %v", dirPath, err)
